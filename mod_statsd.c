@@ -44,8 +44,8 @@
 // module configuration - this is basically a global struct
 typedef struct {
     int enabled;    // module enabled?
-    int port;       // statsd port
     char *host;     // statsd host
+    char *port;     // statsd port
     char *prefix;   // prefix for stats
     char *suffix;   // suffix for stats
 } settings_rec;
@@ -57,7 +57,7 @@ module AP_MODULE_DECLARE_DATA statsd_module;
 static int hook(request_rec *r)
 {
     settings_rec *cfg = ap_get_module_config( r->per_dir_config,
-                                              &cookie2json_module );
+                                              &statsd_module );
 
     /* Do not run in subrequests, don't run if not enabled */
     if( !(cfg->enabled || r->main) ) {
@@ -81,7 +81,7 @@ static void *init_settings(apr_pool_t *p, char *d)
     cfg = (settings_rec *) apr_pcalloc(p, sizeof(settings_rec));
     cfg->enabled = 0;
     cfg->host    = "localhost";
-    cfg->port    = 8125;
+    cfg->port    = "8125";
     cfg->prefix  = "";
     cfg->suffix  = "";
 
@@ -107,10 +107,10 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
     }
 
     if( strcasecmp(name, "StatsdHost") == 0 ) {
-        cfg->callback_name_from = apr_pstrdup(cmd->pool, value);
+        cfg->host = apr_pstrdup(cmd->pool, value);
 
     } else if( strcasecmp(name, "StatsdPort") == 0 ) {
-        cfg->port = int(apr_pstrdup(cmd->pool, value));
+        cfg->port = apr_pstrdup(cmd->pool, value);
 
     } else if( strcasecmp(name, "StatsdPort") == 0 ) {
         cfg->host = apr_pstrdup(cmd->pool, value);
