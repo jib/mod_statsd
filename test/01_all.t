@@ -44,11 +44,14 @@ my %Map     = (
     'regex/200'             => { qs => 'regex.GET.200' },
     'regex/404/bar/210'     => { qs => 'regex.bar.GET.404', resp => 404 },
     'regex/exclude/bar/200' => { qs => 'regex.bar.GET.200' },
+    'regex/alsoexcluded/'   => { qs => 'regex.GET.200' },
     'predefined'            => { qs => 'predefined.GET.200' },
     'predefined/foo'        => { qs => 'predefined.GET.200' },
     'predefined/404'        => { qs => 'predefined.GET.404', resp => 404 },
-    presuf                  => { qs => 'prefix.presuf.suffix.GET.200' },
-    'presuf/foo'            => { qs => 'prefix.presuf.foo.suffix.GET.200' },
+    presuf                  => { qs => 'prefix.presuf.GET.200.suffix' },
+    'presuf/foo'            => { qs => 'prefix.presuf.foo.GET.200.suffix' },
+    nodot_presuf            => { qs => 'prefix.nodot_presuf.GET.200.suffix' },
+    'nodot_presuf/foo'      => { qs => 'prefix.nodot_presuf.foo.GET.200.suffix' },
 );
 
 ### This does all the requests
@@ -101,9 +104,10 @@ for my $endpoint ( sort keys %Map ) {
         ### if we didn't disable the module, the note field looks something like:
         ### prefix.keyname.suffix.GET.200 1234 45
         if( $note ne '-' ) {
-            like( $parts[0], qr/GET.\d{3}$/, "  Key is a valid looking stat" );
-            like( $parts[1], qr/^\d+$/,      "  Resp time is a valid looking number" );
-            like( $parts[2], qr/^\d+$/,      "  Chars sent is a valid looking number" );
+            like( $parts[0], qr/GET.\d{3}(?:\.|$)/,
+                                        "  Key is a valid looking stat" );
+            like( $parts[1], qr/^\d+$/, "  Resp time is a valid looking number" );
+            like( $parts[2], qr/^\d+$/, "  Chars sent is a valid looking number" );
 
             ### depending on if statsd is on or not, the results vary for the last
             ### part of the header; -1 indicates a failure to send, so no statsd
