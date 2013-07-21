@@ -238,10 +238,10 @@ static int request_hook(request_rec *r)
                     r->pool,
                     cfg->prefix,
                     key,         // no dot between key & method because key
-                    cfg->suffix, // will always end in a dot.
                     r->method,
                     ".",
                     apr_psprintf(r->pool, "%d", r->status),
+                    cfg->suffix, // will always end in a dot.
                     NULL
                  );
 
@@ -343,29 +343,25 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
         cfg->host = apr_pstrdup(cmd->pool, value);
 
     } else if( strcasecmp(name, "StatsdPrefix") == 0 ) {
-        // Make sure the last character of prefix is a .
 
+        // Make sure the last character of prefix is a .
         char *copy = apr_pstrdup(cmd->pool, value);
         copy += strlen(copy) - 1;
         _DEBUG && fprintf( stderr, "prefix last char = %s\n", copy );
 
-        char *sep  = *copy == '.' ? "" : ".";
-        cfg->prefix = apr_pstrcat(cmd->pool, value, sep, NULL);
+        cfg->prefix = *copy == '.'
+            ? apr_pstrdup( cmd->pool, value )
+            : apr_pstrcat( cmd->pool, value, ".", NULL );
 
         _DEBUG && fprintf( stderr, "prefix = %s\n", cfg->prefix );
 
 
     } else if( strcasecmp(name, "StatsdSuffix") == 0 ) {
-        // Make sure the first character of suffix is NOT a .
-        // as we're auto-appending a . to any key we get already.
-        // we'd end up with 2 dots in a row; one from the auto append,
-        // one from the suffix.
-        // Also, make sure we have a trailing dot, as the method &
-        // status code will be appended after without checking for
-        // trailing dots of the suffix
-        if( *value == '.' ) { value++; }
 
-        cfg->suffix = apr_pstrcat(cmd->pool, value, ".", NULL);
+        // Make sure there's a leading dot for the suffix
+        cfg->suffix = *value == '.'
+            ? apr_pstrdup( cmd->pool, value )
+            : apr_pstrcat( cmd->pool, ".", value, NULL );
 
         _DEBUG && fprintf( stderr, "suffix = %s\n", cfg->suffix );
 
