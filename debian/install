@@ -1,0 +1,2 @@
+.libs/*.so /usr/lib/apache2/modules/
+*.load /etc/apache2/mods-available/
