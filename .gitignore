@@ -21,6 +21,6 @@
 *.o
 *.lo
 *.slo
-test/error.log
+test/*.log
 test/httpd.pid
 .libs
