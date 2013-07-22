@@ -74,7 +74,7 @@ and can't tell if the delivery failed.
 ### Configuration
 ######################
 
-Note: All the directives can be either set in the Location,directory or .htaccess
+Note: All the directives can be either set in the Location, Directory or .htaccess
 sections of the configuration.
 
 *** Statsd directive
