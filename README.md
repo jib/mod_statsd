@@ -30,6 +30,9 @@ I've written a companion module for [Varnish](http:/varnish-cache.org) as well c
 Installation
 ============
 
+Source
+------
+
 Make sure you have **apxs2** and **perl** installed, which on Ubuntu you can get by running:
 
 ```
@@ -43,6 +46,25 @@ $ sudo ./build.pl
 ```
 
 This will build, install & enable the module on your system
+
+Debian/Ubuntu
+-------------
+
+You can install a Debian package from the Krux OpenSource repository
+by adding this to your apt sources.list (there is nothing lucid specific
+in the packaging; it should work on any other Debian/Ubuntu install):
+
+```
+deb http://ops.krxd.net/apt/foss lucid production
+deb-src http://ops.krxd.net/apt/foss lucid production
+```
+
+And then running the following installation command:
+
+```
+$ sudo apt-get install libapache2-mod-statsd
+```
+
 
 Configuration
 =============
