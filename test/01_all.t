@@ -1,16 +1,11 @@
 #!/usr/bin/perl
 
-### also test with:
-### curl -v -H 'Cookie: a=1' -H 'Cookie: b=2; c=3' 'http://localhost:7000/basic?x=y'
-
-### XXX run out of semaphores? Can happen in testing:
 ### ipcs  | grep 0x0 | awk '{print $2}' | xargs -I% ipcrm -s %
 
 use strict;
 use warnings;
 use FindBin;
 use Test::More      'no_plan';
-use HTTP::Date      qw[str2time];
 use Getopt::Long;
 use Data::Dumper;
 use LWP::UserAgent;
