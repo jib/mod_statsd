@@ -1,0 +1,21 @@
+This work was packaged for Debian by:
+
+    Jos Boumans <jos@dwim.org> on Mon, 22 Jul 2013 00:19:48 +0000
+
+It was downloaded from <https://github.com/jib/mod_statsd>
+
+Upstream Author(s):
+
+    Jos Boumans <jos@dwim.org>
+
+Copyright:
+
+    <Copyright (C) 2013 Jos Boumans>
+
+License:
+
+    MIT
+
+The Debian packaging is:
+
+    Copyright (C) 2013 Jos Boumans <jos@dwim.org>

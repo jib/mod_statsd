@@ -1,0 +1,5 @@
+libapache2-mod-statsd (1.0.0-1) unstable; urgency=low
+
+  * Initial release
+
+ -- Jos Boumans <jos@dwim.org>  Mon, 22 Jul 2013 00:19:48 +0000

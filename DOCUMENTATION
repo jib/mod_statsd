@@ -74,8 +74,8 @@ and can't tell if the delivery failed.
 ### Configuration
 ######################
 
-Note: All the directives can be either set in the server config, virtual host,
-directory or .htaccess sections of the configuration.
+Note: All the directives can be either set in the Location, Directory or .htaccess
+sections of the configuration.
 
 *** Statsd directive
     Syntax:     Statsd on|off
