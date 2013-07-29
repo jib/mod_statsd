@@ -20,9 +20,10 @@ The module is implemented as a logging hook into Apache's runtime,
 meaning it runs after your request backend request is completed
 and data is already being sent to the client.
 
-On my very mediocre VM on my laptop, the average overhead per call
-was **0.4** milliseconds, so any server grade hardware you have should
-be able to do better than that.
+On my very mediocre VM on my laptop, the average overhead per call was **400** microseconds,
+and on an AWS [c1.medium](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html) 
+about **20** microseconds per call. Any high end server hardware should be able to perform 
+better than that.
 
 I've written a companion module for [Varnish](http:/varnish-cache.org) as well called
 [libvmod-statsd](https://github.com/jib/libvmod-statsd) in case you're running Varnish instead/also.
