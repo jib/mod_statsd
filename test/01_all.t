@@ -33,6 +33,8 @@ my %Map     = (
     none                    => { qs => '-' },
     basic                   => { qs => 'basic.GET.200' },
     '///basic////'          => { qs => 'basic.GET.200' },
+    '/basic/x.y'            => { qs => 'basic.x_y.GET.200' },
+    '/basic/x:y|z'          => { qs => 'basic.x_y_z.GET.200' },
     'basic/404'             => { qs => 'basic.404.GET.404', resp => 404 },
     '///basic///foo///'     => { qs => 'basic.foo.GET.200' },
     regex                   => { qs => 'regex.GET.200' },

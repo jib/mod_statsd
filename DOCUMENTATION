@@ -15,6 +15,10 @@ Where <prefix> and <suffix> are optionally configured (see below).
 The path gets converted from /foo/bar to foo.bar and the HTTP method
 (GET) and the response code (200) are also part the stat.
 
+Illegal or undesirable characters as part of the path (like '.',
+which is a record separator in graphite, or ':' and '|' which have
+special meaning in Statsd), will be replaced by a '_' in the metric.
+
 The module is implemented as a logging hook into Apache's runtime,
 meaning it runs after your request backend request is completed
 and data is already being sent to the client.

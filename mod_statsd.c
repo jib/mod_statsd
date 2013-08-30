@@ -50,6 +50,9 @@
 #define ROOT_NAME "ROOT."  // The name for the stat when / is hit.
                            // Note: requires trailing .
 
+#define REPLACE_CHAR '_'   // Char to use when replacing invalid characters
+
+
 // module configuration - this is basically a global struct
 typedef struct {
     int enabled;     // module enabled?
@@ -214,6 +217,22 @@ static int request_hook(request_rec *r)
                 }
 
                 _DEBUG && fprintf( stderr, "part = %s\n", part );
+
+                // Sanitize this part of the string. There's some replacing
+                // we'll want to do
+                i = 0;
+                while( part[i] != '\0' ) {
+
+                    // these chars are either undesired in graphite (.) or
+                    // illegal for statsd (: |)
+                    if( part[i] == '.' || part[i] == ':' || part[i] == '|' ) {
+                        part[i] = REPLACE_CHAR;
+                    }
+
+                    i++;
+                }
+
+                _DEBUG && fprintf( stderr, "sanitized part = %s\n", part );
 
                 key = apr_pstrcat( r->pool, key, part, ".", NULL );
 
