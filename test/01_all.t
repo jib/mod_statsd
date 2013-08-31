@@ -16,11 +16,13 @@ my $Statsd      = 0;    # is statsd running on the default port?
 my $LogFile     = "$FindBin::Bin/diag.log";
 my $HTTPResp    = 200;
 my $StartTime   = time;
+my $TestPhp     = 0;
 
 GetOptions(
     'base=s'    => \$Base,
     'debug'     => \$Debug,
     'statsd'    => \$Statsd,
+    'php'       => \$TestPhp,
     'logfile=s' => \$LogFile,
 );
 
@@ -30,38 +32,50 @@ GetOptions(
 ### the return value stat accordingly
 my %Map     = (
     ### module is not turned on
-    none                    => { qs => '-' },
-    basic                   => { qs => 'basic.GET.200' },
-    '///basic////'          => { qs => 'basic.GET.200' },
-    '/basic/x.y'            => { qs => 'basic.x_y.GET.200' },
-    '/basic/x:y|z'          => { qs => 'basic.x_y_z.GET.200' },
-    'basic/404'             => { qs => 'basic.404.GET.404', resp => 404 },
-    '///basic///foo///'     => { qs => 'basic.foo.GET.200' },
-    regex                   => { qs => 'regex.GET.200' },
-    'regex/200'             => { qs => 'regex.GET.200' },
-    'regex/404/bar/210'     => { qs => 'regex.bar.GET.404', resp => 404 },
-    'regex/exclude/bar/200' => { qs => 'regex.bar.GET.200' },
-    'regex/alsoexcluded/'   => { qs => 'regex.GET.200' },
-    'predefined'            => { qs => 'predefined.GET.200' },
-    'predefined/foo'        => { qs => 'predefined.GET.200' },
-    'predefined/404'        => { qs => 'predefined.GET.404', resp => 404 },
-    presuf                  => { qs => 'prefix.presuf.GET.200.suffix' },
-    'presuf/foo'            => { qs => 'prefix.presuf.foo.GET.200.suffix' },
-    nodot_presuf            => { qs => 'prefix.nodot_presuf.GET.200.suffix' },
-    'nodot_presuf/foo'      => { qs => 'prefix.nodot_presuf.foo.GET.200.suffix' },
+    none                    => { expect => '-' },
+    basic                   => { expect => 'basic.GET.200' },
+    '///basic////'          => { expect => 'basic.GET.200' },
+    '/basic/x.y'            => { expect => 'basic.x_y.GET.200' },
+    '/basic/x:y|z'          => { expect => 'basic.x_y_z.GET.200' },
+    'basic/404'             => { expect => 'basic.404.GET.404', resp => 404 },
+    '///basic///foo///'     => { expect => 'basic.foo.GET.200' },
+    regex                   => { expect => 'regex.GET.200' },
+    'regex/200'             => { expect => 'regex.GET.200' },
+    'regex/404/bar/210'     => { expect => 'regex.bar.GET.404', resp => 404 },
+    'regex/exclude/bar/200' => { expect => 'regex.bar.GET.200' },
+    'regex/alsoexcluded/'   => { expect => 'regex.GET.200' },
+    'predefined'            => { expect => 'predefined.GET.200' },
+    'predefined/foo'        => { expect => 'predefined.GET.200' },
+    'predefined/404'        => { expect => 'predefined.GET.404', resp => 404 },
+    presuf                  => { expect => 'prefix.presuf.GET.200.suffix' },
+    'presuf/foo'            => { expect => 'prefix.presuf.foo.GET.200.suffix' },
+    nodot_presuf            => { expect => 'prefix.nodot_presuf.GET.200.suffix' },
+    'nodot_presuf/foo'      => { expect => 'prefix.nodot_presuf.foo.GET.200.suffix' },
+    auth                    => { expect => 'auth.GET.403', resp => 403 },
 );
+
+### Only add the tests if requested
+if( $TestPhp ) {
+    %Map = (
+        %Map,
+        'php/resp.php'          => { expect => 'php.resp_php.GET.200' },
+        'php/resp.php?resp=403' => { expect => 'php.resp_php.GET.403', resp => 403 },
+        'php/resp.php?resp=503' => { expect => 'php.resp_php.GET.503', resp => 503},
+        'php/syntax_error.php'  => { expect => 'php.syntax_error_php.GET.500', resp => 500 },
+    );
+}
 
 ### This does all the requests
 for my $endpoint ( sort keys %Map ) {
 
     ### build the test
-    my $url     = "$Base/$endpoint?";
+    my $url     = "$Base/$endpoint";
     my $ua      = LWP::UserAgent->new();
     my $conf    = $Map{ $endpoint };
     my $code    = $conf->{resp} || $HTTPResp;
 
     ### make the request
-    my $res     = $ua->get($url . $conf->{qs});
+    my $res     = $ua->get($url, 'X-Expect' => $conf->{expect});
 
     diag $res->as_string if $Debug;
 
@@ -93,10 +107,10 @@ for my $endpoint ( sort keys %Map ) {
         diag $_ if $Debug;
 
         ### Now, let's look at the line and test it.
-        my $path  = $line->{'PATH'};
-        my $qs    = $line->{'QS'};
-        my $note  = $line->{'NOTE'};
-        my @parts = split / /, $note;
+        my $path   = $line->{'PATH'};
+        my $expect = $line->{'HEADER'};
+        my $note   = $line->{'NOTE'};
+        my @parts  = split / /, $note;
 
         ### if we didn't disable the module, the note field looks something like:
         ### prefix.keyname.suffix.GET.200 1234 45
@@ -113,6 +127,6 @@ for my $endpoint ( sort keys %Map ) {
         }
 
         ### the stat sent
-        is( "?$parts[0]", $qs,              "  Stat sent as expected: $parts[0]" );
+        is( $parts[0], $expect,             "  Stat sent as expected: $parts[0]" );
     }
 }
