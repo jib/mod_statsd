@@ -1,3 +1,9 @@
+libapache2-mod-statsd (1.0.1-1) unstable; urgency=low
+
+  * Support for stripping unwanted characters from the path
+
+ -- Jos Boumans <jos@dwim.org>  Sat, 31 Aug 2013 02:25:05 +0200
+
 libapache2-mod-statsd (1.0.0-1) unstable; urgency=low
 
   * Initial release
