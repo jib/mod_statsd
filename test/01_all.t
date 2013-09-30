@@ -62,6 +62,7 @@ if( $TestPhp ) {
         'php/resp.php?resp=403' => { expect => 'php.resp_php.GET.403', resp => 403 },
         'php/resp.php?resp=503' => { expect => 'php.resp_php.GET.503', resp => 503},
         'php/syntax_error.php'  => { expect => 'php.syntax_error_php.GET.500', resp => 500 },
+        'php/note.php'          => { expect => 'set.via.note.GET.200' }
     );
 }
 

@@ -46,9 +46,11 @@
 #define _DEBUG 0
 #endif
 
-#define NOTE_NAME "statsd" // The note to set with the stat info.
-#define ROOT_NAME "ROOT."  // The name for the stat when / is hit.
-                           // Note: requires trailing .
+#define NOTE_NAME "statsd"              // The note to set with the stat info.
+#define NOTE_NAME_STAT "statsd.stat"    // The note to use as a stat key, if set
+#define HEADER_STAT "X-Statsd-Stat"     // The header to use as a stat key, if set
+#define ROOT_NAME "ROOT."               // The name for the stat when / is hit.
+                                        // Note: requires trailing .
 
 #define REPLACE_CHAR '_'   // Char to use when replacing invalid characters
 
@@ -156,90 +158,107 @@ static int request_hook(request_rec *r)
         return DECLINED;
     }
 
-    // The stat, minus prefix/suffix/status code etc.
-    char *key = cfg->stat;
+    // The various ways in which you can give us a stat name, in order
+    // of preference that they are used
+    char *key               = cfg->stat;
+    const char *stat_note   = apr_table_get(r->notes, NOTE_NAME_STAT);
+    const char *stat_header = apr_table_get(r->headers_out, HEADER_STAT);
 
     // If you provided the key as part of the configuration, we'll use
-    // it, otherwise we will infer it from the path
     if( !strlen(key) ) {
 
-        _DEBUG && fprintf( stderr, "stat key not set in config\n" );
+        // A note could be set - use that if it's there. Note, don't use strlen()
+        // as it'll be NULL if the note wasn't set
+        if( stat_note ) {
+            _DEBUG && fprintf( stderr, "stat key from note: %s\n", stat_note );
 
-        // The path, cleaned up.
-        char *path = apr_pstrdup( r->pool, r->uri );
+            // so that's our key now - make sure it ends with a .
+            key = apr_pstrcat( r->pool, stat_note, ".", NULL );
 
-        // Remove leading slashes - quick fix for leading double slashes.
-        while( path[0] == '/' ) { path++; }
+        // Could be a header
+        // } else if () {
 
-        // Iterate over the path parts, get rid of slashes and unwanted
-        // parts. Or, default to a root name.
-        if( *path == 0 ) {
-            key = ROOT_NAME;
-
+        // it, otherwise we will infer it from the path
         } else {
-            char *last_part;
-            char *part = apr_strtok( apr_pstrdup( r->pool, path ), "/", &last_part );
 
-            while( part != NULL ) {
+            _DEBUG && fprintf( stderr, "stat key not set in config\n" );
 
-                // This is just more stacked slashes, move on.
-                if( part == 0 ) {
-                    // And get the next part -- has to be done at every break
-                    part = apr_strtok( NULL, "/", &last_part );
-                    continue;
-                }
+            // The path, cleaned up.
+            char *path = apr_pstrdup( r->pool, r->uri );
 
-                // Maybe we don't want this path part in the stat; check
-                // the exclude regex list.
-                int i;
-                int exclude_part = 0;
-                for( i = 0; i < cfg->exclude_regex->nelts; i++ ) {
+            // Remove leading slashes - quick fix for leading double slashes.
+            while( path[0] == '/' ) { path++; }
 
-                    ap_regex_t *regex = ((ap_regex_t **)cfg->exclude_regex->elts)[i];
+            // Iterate over the path parts, get rid of slashes and unwanted
+            // parts. Or, default to a root name.
+            if( *path == 0 ) {
+                key = ROOT_NAME;
 
-                    _DEBUG && fprintf(
-                        stderr, "checking white list prefix id: %d\n", i );
+            } else {
+                char *last_part;
+                char *part = apr_strtok( apr_pstrdup( r->pool, path ), "/", &last_part );
 
-                    // ap_regexec returns 0 if there was a match
-                    if( !ap_regexec( regex, part, 0, NULL, 0 ) ) {
-                        _DEBUG && fprintf( stderr,
-                                    "Part %s matches regex id %d\n", part, i );
-                        exclude_part = 1;
-                        break;
-                    }
-                }
+                while( part != NULL ) {
 
-                // We don't want this bit in the stat
-                if( exclude_part ) {
-                    // And get the next part -- has to be done at every break
-                    part = apr_strtok( NULL, "/", &last_part );
-                    continue;
-                }
-
-                _DEBUG && fprintf( stderr, "part = %s\n", part );
-
-                // Sanitize this part of the string. There's some replacing
-                // we'll want to do
-                i = 0;
-                while( part[i] != '\0' ) {
-
-                    // these chars are either undesired in graphite (.) or
-                    // illegal for statsd (: |)
-                    if( part[i] == '.' || part[i] == ':' || part[i] == '|' ) {
-                        part[i] = REPLACE_CHAR;
+                    // This is just more stacked slashes, move on.
+                    if( part == 0 ) {
+                        // And get the next part -- has to be done at every break
+                        part = apr_strtok( NULL, "/", &last_part );
+                        continue;
                     }
 
-                    i++;
+                    // Maybe we don't want this path part in the stat; check
+                    // the exclude regex list.
+                    int i;
+                    int exclude_part = 0;
+                    for( i = 0; i < cfg->exclude_regex->nelts; i++ ) {
+
+                        ap_regex_t *regex = ((ap_regex_t **)cfg->exclude_regex->elts)[i];
+
+                        _DEBUG && fprintf(
+                            stderr, "checking white list prefix id: %d\n", i );
+
+                        // ap_regexec returns 0 if there was a match
+                        if( !ap_regexec( regex, part, 0, NULL, 0 ) ) {
+                            _DEBUG && fprintf( stderr,
+                                        "Part %s matches regex id %d\n", part, i );
+                            exclude_part = 1;
+                            break;
+                        }
+                    }
+
+                    // We don't want this bit in the stat
+                    if( exclude_part ) {
+                        // And get the next part -- has to be done at every break
+                        part = apr_strtok( NULL, "/", &last_part );
+                        continue;
+                    }
+
+                    _DEBUG && fprintf( stderr, "part = %s\n", part );
+
+                    // Sanitize this part of the string. There's some replacing
+                    // we'll want to do
+                    i = 0;
+                    while( part[i] != '\0' ) {
+
+                        // these chars are either undesired in graphite (.) or
+                        // illegal for statsd (: |)
+                        if( part[i] == '.' || part[i] == ':' || part[i] == '|' ) {
+                            part[i] = REPLACE_CHAR;
+                        }
+
+                        i++;
+                    }
+
+                    _DEBUG && fprintf( stderr, "sanitized part = %s\n", part );
+
+                    key = apr_pstrcat( r->pool, key, part, ".", NULL );
+
+                    _DEBUG && fprintf( stderr, "key so far = %s\n", key );
+
+                    // and move the pointer
+                    part = apr_strtok( NULL, "/", &last_part );
                 }
-
-                _DEBUG && fprintf( stderr, "sanitized part = %s\n", part );
-
-                key = apr_pstrcat( r->pool, key, part, ".", NULL );
-
-                _DEBUG && fprintf( stderr, "key so far = %s\n", key );
-
-                // and move the pointer
-                part = apr_strtok( NULL, "/", &last_part );
             }
         }
     }
