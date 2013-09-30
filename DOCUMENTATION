@@ -19,6 +19,11 @@ Illegal or undesirable characters as part of the path (like '.',
 which is a record separator in graphite, or ':' and '|' which have
 special meaning in Statsd), will be replaced by a '_' in the metric.
 
+If you do not want the statname to be inferred from the URL, there
+are ways to set the statname via an Apache note, an outgoing header
+or staticaly in the configuration. See the StatsdStat directive below
+for details.
+
 The module is implemented as a logging hook into Apache's runtime,
 meaning it runs after your request backend request is completed
 and data is already being sent to the client.
@@ -166,6 +171,20 @@ sections of the configuration.
     This way, requests to both www.example.com/api/userdata/age/42 as well as
     www.example.com/api/userdata/gender/male would be grouped up under the
     api.userdata key.
+
+    Alternately, you can set the statname via an Apache note from your app
+    using the 'statsd.stat' note. From PHP, this would work like:
+
+      <?php apache_note('statsd.stat', 'set.via.note') ?>
+
+    Another option would be to set an outgoing header in your application,
+    which will be used (but not removed) by mod_statsd to set the statname.
+    For example:
+
+      X-Statsd-Stat: set.via.header
+
+    The order of preference for the statname is StatsdStat directive, Apache
+    note, outgoing header and lastly url inferenence.
 
     Note that both the HTTP method & status code would still be appended to
     this key, as would any prefix & suffix you set up.

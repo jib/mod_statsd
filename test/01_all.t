@@ -52,6 +52,7 @@ my %Map     = (
     nodot_presuf            => { expect => 'prefix.nodot_presuf.GET.200.suffix' },
     'nodot_presuf/foo'      => { expect => 'prefix.nodot_presuf.foo.GET.200.suffix' },
     auth                    => { expect => 'auth.GET.403', resp => 403 },
+    'header/stat'           => { expect => 'set.via.header.GET.200' },
 );
 
 ### Only add the tests if requested

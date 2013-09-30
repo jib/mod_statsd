@@ -176,7 +176,11 @@ static int request_hook(request_rec *r)
             key = apr_pstrcat( r->pool, stat_note, ".", NULL );
 
         // Could be a header
-        // } else if () {
+        } else if( stat_header ) {
+            _DEBUG && fprintf( stderr, "stat key from header: %s\n", stat_header );
+
+            // so that's our key now - make sure it ends with a .
+            key = apr_pstrcat( r->pool, stat_header, ".", NULL );
 
         // it, otherwise we will infer it from the path
         } else {
