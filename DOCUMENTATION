@@ -189,6 +189,28 @@ sections of the configuration.
     Note that both the HTTP method & status code would still be appended to
     this key, as would any prefix & suffix you set up.
 
+*** StatsdAggregateStat directive
+
+    Syntax:     StatsdAggregateStat statname
+    Default:    NULL
+
+    Like StatsdStat, this directive allows you to unconditionally set the
+    aggregate stat name. This is useful to roll up stats for a given endpoint
+    or server. For example, you may have an API endpoint like this:
+
+    <Location /api>
+      Statsd On
+      StatsdAggregateStat api._total
+    </Location>
+
+    Now, every request under /api (like, /api/foo, and /api/bar) will get their
+    individual stats, but additionally, there will be a roll up stat called
+    'api._total', which will be incremented for any requests under /api.
+
+    This makes it possible to do aggregation on the server side, rather than
+    burdening graphite or other backend systems with either custom aggregation
+    rules, or complicated query patterns.
+
 *** StatsdExclude directive
     Syntax:     StatsdExclude regex [,regex , ...]
     Default:    NULL

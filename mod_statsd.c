@@ -48,6 +48,8 @@
 
 #define NOTE_NAME "statsd"              // The note to set with the stat info.
 #define NOTE_NAME_STAT "statsd.stat"    // The note to use as a stat key, if set
+#define NOTE_NAME_AGGREGATE "statsd.aggregate"
+                                        // The note holding the aggregate stat key
 #define HEADER_STAT "X-Statsd-Stat"     // The header to use as a stat key, if set
 #define ROOT_NAME "ROOT."               // The name for the stat when / is hit.
                                         // Note: requires trailing .
@@ -65,6 +67,8 @@ typedef struct {
     char *prefix;    // prefix for stats
     char *stat;      // the stat itself, if provided in the config
     char *suffix;    // suffix for stats
+    char *aggregate_stat;
+                    // Aggregate stat key to use for all stats
     apr_array_header_t *exclude_regex;
                     // List of regexes to exclude path parts from stats
 } settings_rec;
@@ -280,10 +284,10 @@ static int request_hook(request_rec *r)
                     r->pool,
                     cfg->prefix,
                     key,         // no dot between key & method because key
-                    r->method,
+                    r->method,   // will always end in a dot.
                     ".",
                     apr_psprintf(r->pool, "%d", r->status),
-                    cfg->suffix, // will always end in a dot.
+                    cfg->suffix,
                     NULL
                  );
 
@@ -300,6 +304,34 @@ static int request_hook(request_rec *r)
                         stat, ":", duration, "|ms", // timer
                         NULL
                     );
+
+    // You may have also asked for an aggregate stat. If so, add it here.
+    if( strlen( cfg->aggregate_stat ) ) {
+        char *aggregate_stat = apr_pstrcat(
+                        r->pool,
+                        cfg->prefix,
+                        cfg->aggregate_stat, // no dot between key & method because key
+                        r->method,           // will always end in a dot.
+                        ".",
+                        apr_psprintf(r->pool, "%d", r->status),
+                        cfg->suffix, // will always end in a dot.
+                        NULL
+                     );
+
+        to_send = apr_pstrcat(
+                    r->pool,
+                    to_send,
+                    aggregate_stat, ":1|c",                 //counter,
+                    "\n",
+                    aggregate_stat, ":", duration, "|ms",   // timer
+                    NULL
+                );
+
+        // Mostly for testing/debugging purposes, we'll also set this note,
+        // but modulo the send / duration metrics
+        apr_table_setn(r->notes, NOTE_NAME_AGGREGATE, aggregate_stat);
+    }
+
 
     _DEBUG && fprintf( stderr, "Will be sending to fd %d: %s\n", sock, to_send );
 
@@ -318,6 +350,8 @@ static int request_hook(request_rec *r)
     char *note = apr_psprintf(r->pool, "%s %s %d", stat, duration, sent);
     _DEBUG && fprintf( stderr, "setting note %s: %s\n", NOTE_NAME, note );
      apr_table_setn(r->notes, NOTE_NAME, note);
+
+
 
     // We need to flush the stream for messages to appear right away.
     // Performing an fflush() in a production system is not good for
@@ -346,6 +380,7 @@ static void *init_settings(apr_pool_t *p, char *d)
     cfg->stat           = "";
     cfg->prefix         = "";
     cfg->suffix         = "";
+    cfg->aggregate_stat = "";
     cfg->exclude_regex  = apr_array_make(p, 2, sizeof(ap_regex_t*) );
 
     return cfg;
@@ -416,6 +451,15 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
                         ".",
                         NULL );
 
+    } else if( strcasecmp(name, "StatsdAggregateStat") == 0 ) {
+
+        // The stat key always needs to ends in a . so might
+        // as well add it here.
+        cfg->aggregate_stat = apr_pstrcat( cmd->pool,
+                                    apr_pstrdup(cmd->pool, value),
+                                    ".",
+                                    NULL );
+
     } else if( strcasecmp(name, "StatsdTimeUnit") == 0 ) {
 
         // Timing is in microseconds, so we may have to convert
@@ -474,22 +518,24 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
    ******************************************** */
 
 static const command_rec commands[] = {
-    AP_INIT_FLAG(   "Statsd",          set_config_enable,  NULL, OR_FILEINFO,
+    AP_INIT_FLAG(   "Statsd",             set_config_enable,  NULL, OR_FILEINFO,
                     "Whether or not to enable Statsd module"),
-    AP_INIT_TAKE1(  "StatsdHost",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdHost",         set_config_value,   NULL, OR_FILEINFO,
                     "The address of your Statsd server"),
-    AP_INIT_TAKE1(  "StatsdPort",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdPort",         set_config_value,   NULL, OR_FILEINFO,
                     "The port of your Statsd server" ),
-    AP_INIT_TAKE1(  "StatsdTimeUnit",  set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdTimeUnit",     set_config_value,   NULL, OR_FILEINFO,
                     "The unit for timers sent to Statsd" ),
-    AP_INIT_TAKE1(  "StatsdPrefix",    set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdPrefix",       set_config_value,   NULL, OR_FILEINFO,
                     "A string to prefix to all the stats sent" ),
-    AP_INIT_TAKE1(  "StatsdSuffix",    set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdSuffix",       set_config_value,   NULL, OR_FILEINFO,
                     "A string to suffix to all the stats sent" ),
-    AP_INIT_TAKE1(  "StatsdStat",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdStat",         set_config_value,   NULL, OR_FILEINFO,
                     "The stat itself to send"),
-    AP_INIT_ITERATE("StatsdExclude",   set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_ITERATE("StatsdExclude",      set_config_value,   NULL, OR_FILEINFO,
                     "A list of regexes of path parts to exclude from stats" ),
+    AP_INIT_TAKE1(  "StatsdAggregateStat", set_config_value,   NULL, OR_FILEINFO,
+                    "Aggregate stats key to use for all requests"),
     {NULL}
 };
 
