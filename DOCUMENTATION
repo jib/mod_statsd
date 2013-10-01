@@ -19,6 +19,11 @@ Illegal or undesirable characters as part of the path (like '.',
 which is a record separator in graphite, or ':' and '|' which have
 special meaning in Statsd), will be replaced by a '_' in the metric.
 
+If you do not want the statname to be inferred from the URL, there
+are ways to set the statname via an Apache note, an outgoing header
+or staticaly in the configuration. See the StatsdStat directive below
+for details.
+
 The module is implemented as a logging hook into Apache's runtime,
 meaning it runs after your request backend request is completed
 and data is already being sent to the client.
@@ -60,13 +65,14 @@ able to discern what the module is doing, it sets a Note[4] that you can
 inspect in your logfiles. The Note field is %{statsd}n, is whitespace
 separated and will look something like this:
 
-  path.from.url.GET.200 942 48
+  path.from.url.GET.200 942 48 1
 
 The first field is the stat as it is sent to Statsd. The second field is
 the request duration (in whatever unit you specified, see below) and the
 third field is the amount of bytes sent to statsd. If the third field is
 -1, the delivery to Statsd failed and is a telltale sign of a broken
-Statsd configuration for this module.
+Statsd configuration for this module. The fourth field indicates whether
+legacy mode is enabled or not.
 
 Note that if your Statsd server is not on localhost, there's no way for
 the kernel to know that the remote host was not available/misconfigured
@@ -85,7 +91,7 @@ sections of the configuration.
     Syntax:     Statsd on|off
     Default:    Statsd off
 
-    When mod_statsd is loaded, and Statsd on is set, Apache send two stats (a
+    When mod_statsd is loaded, and Statsd on is set, Apache sends two stats (a
     counter and a timer) for every request that is received. For a request to
     'www.example.com/foo/bar?baz=42' the stat format would be:
 
@@ -167,8 +173,44 @@ sections of the configuration.
     www.example.com/api/userdata/gender/male would be grouped up under the
     api.userdata key.
 
+    Alternately, you can set the statname via an Apache note from your app
+    using the 'statsd.stat' note. From PHP, this would work like:
+
+      <?php apache_note('statsd.stat', 'set.via.note') ?>
+
+    Another option would be to set an outgoing header in your application,
+    which will be used (but not removed) by mod_statsd to set the statname.
+    For example:
+
+      X-Statsd-Stat: set.via.header
+
+    The order of preference for the statname is StatsdStat directive, Apache
+    note, outgoing header and lastly url inferenence.
+
     Note that both the HTTP method & status code would still be appended to
     this key, as would any prefix & suffix you set up.
+
+*** StatsdAggregateStat directive
+
+    Syntax:     StatsdAggregateStat statname
+    Default:    NULL
+
+    Like StatsdStat, this directive allows you to unconditionally set the
+    aggregate stat name. This is useful to roll up stats for a given endpoint
+    or server. For example, you may have an API endpoint like this:
+
+    <Location /api>
+      Statsd On
+      StatsdAggregateStat api._total
+    </Location>
+
+    Now, every request under /api (like, /api/foo, and /api/bar) will get their
+    individual stats, but additionally, there will be a roll up stat called
+    'api._total', which will be incremented for any requests under /api.
+
+    This makes it possible to do aggregation on the server side, rather than
+    burdening graphite or other backend systems with either custom aggregation
+    rules, or complicated query patterns.
 
 *** StatsdExclude directive
     Syntax:     StatsdExclude regex [,regex , ...]
@@ -188,6 +230,24 @@ sections of the configuration.
     where certain parts of the URL are either dynamic (like IDs) or not
     relevant to the statistic gathered.
 
+*** StatsdLegacyMode directive
+    Syntax:     StatsdLegacyMode on|off
+    Default:    StatsdLegacyMode on
 
+    By default, when mod_statsd is loaded, and Statsd on is set, Apache
+    sends two stats (a counter and a timer) for every request that is
+    received.
 
+    In newer versions of Statsd[5] (v0.6.0 and up), a new naming scheme was
+    adopted for stats sent, which, among others, produces counters for every
+    timer that's sent.
 
+    The default in Statsd v0.6.0 is to have 'Legacy Namespace' on by default,
+    which keeps on sending both the counters & timer, and mod_statsd follows
+    that default.
+
+    If you're using Statsd v0.6.0 or up, and you're NOT using the legacy
+    namespace feature, you probably want to set this directive to 'off' as
+    well.
+
+    [5] https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57

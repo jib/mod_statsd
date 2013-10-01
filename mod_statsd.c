@@ -46,9 +46,13 @@
 #define _DEBUG 0
 #endif
 
-#define NOTE_NAME "statsd" // The note to set with the stat info.
-#define ROOT_NAME "ROOT."  // The name for the stat when / is hit.
-                           // Note: requires trailing .
+#define NOTE_NAME "statsd"              // The note to set with the stat info.
+#define NOTE_NAME_STAT "statsd.stat"    // The note to use as a stat key, if set
+#define NOTE_NAME_AGGREGATE "statsd.aggregate"
+                                        // The note holding the aggregate stat key
+#define HEADER_STAT "X-Statsd-Stat"     // The header to use as a stat key, if set
+#define ROOT_NAME "ROOT."               // The name for the stat when / is hit.
+                                        // Note: requires trailing .
 
 #define REPLACE_CHAR '_'   // Char to use when replacing invalid characters
 
@@ -56,6 +60,7 @@
 // module configuration - this is basically a global struct
 typedef struct {
     int enabled;     // module enabled?
+    int legacy_mode; // legacy namespace mode enabled?
     int divider;     // divide the request time by this number
     int socket;      // statsd connection
     char *host;      // statsd host
@@ -63,6 +68,8 @@ typedef struct {
     char *prefix;    // prefix for stats
     char *stat;      // the stat itself, if provided in the config
     char *suffix;    // suffix for stats
+    char *aggregate_stat;
+                    // Aggregate stat key to use for all stats
     apr_array_header_t *exclude_regex;
                     // List of regexes to exclude path parts from stats
 } settings_rec;
@@ -156,90 +163,111 @@ static int request_hook(request_rec *r)
         return DECLINED;
     }
 
-    // The stat, minus prefix/suffix/status code etc.
-    char *key = cfg->stat;
+    // The various ways in which you can give us a stat name, in order
+    // of preference that they are used
+    char *key               = cfg->stat;
+    const char *stat_note   = apr_table_get(r->notes, NOTE_NAME_STAT);
+    const char *stat_header = apr_table_get(r->headers_out, HEADER_STAT);
 
     // If you provided the key as part of the configuration, we'll use
-    // it, otherwise we will infer it from the path
     if( !strlen(key) ) {
 
-        _DEBUG && fprintf( stderr, "stat key not set in config\n" );
+        // A note could be set - use that if it's there. Note, don't use strlen()
+        // as it'll be NULL if the note wasn't set
+        if( stat_note ) {
+            _DEBUG && fprintf( stderr, "stat key from note: %s\n", stat_note );
 
-        // The path, cleaned up.
-        char *path = apr_pstrdup( r->pool, r->uri );
+            // so that's our key now - make sure it ends with a .
+            key = apr_pstrcat( r->pool, stat_note, ".", NULL );
 
-        // Remove leading slashes - quick fix for leading double slashes.
-        while( path[0] == '/' ) { path++; }
+        // Could be a header
+        } else if( stat_header ) {
+            _DEBUG && fprintf( stderr, "stat key from header: %s\n", stat_header );
 
-        // Iterate over the path parts, get rid of slashes and unwanted
-        // parts. Or, default to a root name.
-        if( *path == 0 ) {
-            key = ROOT_NAME;
+            // so that's our key now - make sure it ends with a .
+            key = apr_pstrcat( r->pool, stat_header, ".", NULL );
 
+        // it, otherwise we will infer it from the path
         } else {
-            char *last_part;
-            char *part = apr_strtok( apr_pstrdup( r->pool, path ), "/", &last_part );
 
-            while( part != NULL ) {
+            _DEBUG && fprintf( stderr, "stat key not set in config\n" );
 
-                // This is just more stacked slashes, move on.
-                if( part == 0 ) {
-                    // And get the next part -- has to be done at every break
-                    part = apr_strtok( NULL, "/", &last_part );
-                    continue;
-                }
+            // The path, cleaned up.
+            char *path = apr_pstrdup( r->pool, r->uri );
 
-                // Maybe we don't want this path part in the stat; check
-                // the exclude regex list.
-                int i;
-                int exclude_part = 0;
-                for( i = 0; i < cfg->exclude_regex->nelts; i++ ) {
+            // Remove leading slashes - quick fix for leading double slashes.
+            while( path[0] == '/' ) { path++; }
 
-                    ap_regex_t *regex = ((ap_regex_t **)cfg->exclude_regex->elts)[i];
+            // Iterate over the path parts, get rid of slashes and unwanted
+            // parts. Or, default to a root name.
+            if( *path == 0 ) {
+                key = ROOT_NAME;
 
-                    _DEBUG && fprintf(
-                        stderr, "checking white list prefix id: %d\n", i );
+            } else {
+                char *last_part;
+                char *part = apr_strtok( apr_pstrdup( r->pool, path ), "/", &last_part );
 
-                    // ap_regexec returns 0 if there was a match
-                    if( !ap_regexec( regex, part, 0, NULL, 0 ) ) {
-                        _DEBUG && fprintf( stderr,
-                                    "Part %s matches regex id %d\n", part, i );
-                        exclude_part = 1;
-                        break;
-                    }
-                }
+                while( part != NULL ) {
 
-                // We don't want this bit in the stat
-                if( exclude_part ) {
-                    // And get the next part -- has to be done at every break
-                    part = apr_strtok( NULL, "/", &last_part );
-                    continue;
-                }
-
-                _DEBUG && fprintf( stderr, "part = %s\n", part );
-
-                // Sanitize this part of the string. There's some replacing
-                // we'll want to do
-                i = 0;
-                while( part[i] != '\0' ) {
-
-                    // these chars are either undesired in graphite (.) or
-                    // illegal for statsd (: |)
-                    if( part[i] == '.' || part[i] == ':' || part[i] == '|' ) {
-                        part[i] = REPLACE_CHAR;
+                    // This is just more stacked slashes, move on.
+                    if( part == 0 ) {
+                        // And get the next part -- has to be done at every break
+                        part = apr_strtok( NULL, "/", &last_part );
+                        continue;
                     }
 
-                    i++;
+                    // Maybe we don't want this path part in the stat; check
+                    // the exclude regex list.
+                    int i;
+                    int exclude_part = 0;
+                    for( i = 0; i < cfg->exclude_regex->nelts; i++ ) {
+
+                        ap_regex_t *regex = ((ap_regex_t **)cfg->exclude_regex->elts)[i];
+
+                        _DEBUG && fprintf(
+                            stderr, "checking white list prefix id: %d\n", i );
+
+                        // ap_regexec returns 0 if there was a match
+                        if( !ap_regexec( regex, part, 0, NULL, 0 ) ) {
+                            _DEBUG && fprintf( stderr,
+                                        "Part %s matches regex id %d\n", part, i );
+                            exclude_part = 1;
+                            break;
+                        }
+                    }
+
+                    // We don't want this bit in the stat
+                    if( exclude_part ) {
+                        // And get the next part -- has to be done at every break
+                        part = apr_strtok( NULL, "/", &last_part );
+                        continue;
+                    }
+
+                    _DEBUG && fprintf( stderr, "part = %s\n", part );
+
+                    // Sanitize this part of the string. There's some replacing
+                    // we'll want to do
+                    i = 0;
+                    while( part[i] != '\0' ) {
+
+                        // these chars are either undesired in graphite (.) or
+                        // illegal for statsd (: |)
+                        if( part[i] == '.' || part[i] == ':' || part[i] == '|' ) {
+                            part[i] = REPLACE_CHAR;
+                        }
+
+                        i++;
+                    }
+
+                    _DEBUG && fprintf( stderr, "sanitized part = %s\n", part );
+
+                    key = apr_pstrcat( r->pool, key, part, ".", NULL );
+
+                    _DEBUG && fprintf( stderr, "key so far = %s\n", key );
+
+                    // and move the pointer
+                    part = apr_strtok( NULL, "/", &last_part );
                 }
-
-                _DEBUG && fprintf( stderr, "sanitized part = %s\n", part );
-
-                key = apr_pstrcat( r->pool, key, part, ".", NULL );
-
-                _DEBUG && fprintf( stderr, "key so far = %s\n", key );
-
-                // and move the pointer
-                part = apr_strtok( NULL, "/", &last_part );
             }
         }
     }
@@ -257,10 +285,10 @@ static int request_hook(request_rec *r)
                     r->pool,
                     cfg->prefix,
                     key,         // no dot between key & method because key
-                    r->method,
+                    r->method,   // will always end in a dot.
                     ".",
                     apr_psprintf(r->pool, "%d", r->status),
-                    cfg->suffix, // will always end in a dot.
+                    cfg->suffix,
                     NULL
                  );
 
@@ -272,11 +300,57 @@ static int request_hook(request_rec *r)
     // newlines. So do that here.
     char *to_send = apr_pstrcat(
                         r->pool,
-                        stat, ":1|c",               // counter
-                        "\n",
                         stat, ":", duration, "|ms", // timer
                         NULL
                     );
+
+    // in legacy mode, we add the counter. In newer versions of statsd,
+    // the counter is generated automatically for timers.
+    if( cfg->legacy_mode ) {
+        to_send = apr_pstrcat(
+                        r->pool,
+                        to_send, "\n",  // stats so far
+                        stat, ":1|c",   // counter
+                        NULL
+                    );
+    }
+
+    // You may have also asked for an aggregate stat. If so, add it here.
+    if( strlen( cfg->aggregate_stat ) ) {
+        char *aggregate_stat = apr_pstrcat(
+                        r->pool,
+                        cfg->prefix,
+                        cfg->aggregate_stat, // no dot between key & method because key
+                        r->method,           // will always end in a dot.
+                        ".",
+                        apr_psprintf(r->pool, "%d", r->status),
+                        cfg->suffix, // will always end in a dot.
+                        NULL
+                     );
+
+        to_send = apr_pstrcat(
+                        r->pool,
+                        to_send, "\n",                          // stats so far
+                        aggregate_stat, ":", duration, "|ms",   // timer
+                        NULL
+                    );
+
+        // in legacy mode, we add the counter. In newer versions of statsd,
+        // the counter is generated automatically for timers.
+        if( cfg->legacy_mode ) {
+            to_send = apr_pstrcat(
+                        r->pool,
+                        to_send, "\n",          // stats so far
+                        aggregate_stat, ":1|c", //counter,
+                        NULL
+                      );
+        }
+
+        // Mostly for testing/debugging purposes, we'll also set this note,
+        // but modulo the send / duration metrics
+        apr_table_setn(r->notes, NOTE_NAME_AGGREGATE, aggregate_stat);
+    }
+
 
     _DEBUG && fprintf( stderr, "Will be sending to fd %d: %s\n", sock, to_send );
 
@@ -292,7 +366,7 @@ static int request_hook(request_rec *r)
         _DEBUG && fflush( stderr );
     }
 
-    char *note = apr_psprintf(r->pool, "%s %s %d", stat, duration, sent);
+    char *note = apr_psprintf(r->pool, "%s %s %d %d", stat, duration, sent, cfg->legacy_mode);
     _DEBUG && fprintf( stderr, "setting note %s: %s\n", NOTE_NAME, note );
      apr_table_setn(r->notes, NOTE_NAME, note);
 
@@ -317,12 +391,15 @@ static void *init_settings(apr_pool_t *p, char *d)
 
     cfg = (settings_rec *) apr_pcalloc(p, sizeof(settings_rec));
     cfg->enabled        = 0;
+    cfg->legacy_mode    = 1;    // default to on, like statsd does:
+                                // https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
     cfg->divider        = 1000; // default to milliseconds for timing
     cfg->host           = "localhost";
     cfg->port           = "8125";
     cfg->stat           = "";
     cfg->prefix         = "";
     cfg->suffix         = "";
+    cfg->aggregate_stat = "";
     cfg->exclude_regex  = apr_array_make(p, 2, sizeof(ap_regex_t*) );
 
     return cfg;
@@ -393,6 +470,15 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
                         ".",
                         NULL );
 
+    } else if( strcasecmp(name, "StatsdAggregateStat") == 0 ) {
+
+        // The stat key always needs to ends in a . so might
+        // as well add it here.
+        cfg->aggregate_stat = apr_pstrcat( cmd->pool,
+                                    apr_pstrdup(cmd->pool, value),
+                                    ".",
+                                    NULL );
+
     } else if( strcasecmp(name, "StatsdTimeUnit") == 0 ) {
 
         // Timing is in microseconds, so we may have to convert
@@ -435,7 +521,10 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
     sprintf( name, "%s", cmd->cmd->name );
 
     if( strcasecmp(name, "Statsd") == 0 ) {
-        cfg->enabled     = value;
+        cfg->enabled = value;
+
+    } else if( strcasecmp(name, "StatsdLegacyMode") == 0 ) {
+        cfg->legacy_mode = value;
 
     } else {
         return apr_psprintf(cmd->pool, "No such variable %s", name);
@@ -451,22 +540,26 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
    ******************************************** */
 
 static const command_rec commands[] = {
-    AP_INIT_FLAG(   "Statsd",          set_config_enable,  NULL, OR_FILEINFO,
+    AP_INIT_FLAG(   "Statsd",             set_config_enable,  NULL, OR_FILEINFO,
                     "Whether or not to enable Statsd module"),
-    AP_INIT_TAKE1(  "StatsdHost",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_FLAG(   "StatsdLegacyMode",   set_config_enable,  NULL, OR_FILEINFO,
+                    "Whether or not to enable Statsd legacy namespace mode"),
+    AP_INIT_TAKE1(  "StatsdHost",         set_config_value,   NULL, OR_FILEINFO,
                     "The address of your Statsd server"),
-    AP_INIT_TAKE1(  "StatsdPort",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdPort",         set_config_value,   NULL, OR_FILEINFO,
                     "The port of your Statsd server" ),
-    AP_INIT_TAKE1(  "StatsdTimeUnit",  set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdTimeUnit",     set_config_value,   NULL, OR_FILEINFO,
                     "The unit for timers sent to Statsd" ),
-    AP_INIT_TAKE1(  "StatsdPrefix",    set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdPrefix",       set_config_value,   NULL, OR_FILEINFO,
                     "A string to prefix to all the stats sent" ),
-    AP_INIT_TAKE1(  "StatsdSuffix",    set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdSuffix",       set_config_value,   NULL, OR_FILEINFO,
                     "A string to suffix to all the stats sent" ),
-    AP_INIT_TAKE1(  "StatsdStat",      set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_TAKE1(  "StatsdStat",         set_config_value,   NULL, OR_FILEINFO,
                     "The stat itself to send"),
-    AP_INIT_ITERATE("StatsdExclude",   set_config_value,   NULL, OR_FILEINFO,
+    AP_INIT_ITERATE("StatsdExclude",      set_config_value,   NULL, OR_FILEINFO,
                     "A list of regexes of path parts to exclude from stats" ),
+    AP_INIT_TAKE1(  "StatsdAggregateStat", set_config_value,   NULL, OR_FILEINFO,
+                    "Aggregate stats key to use for all requests"),
     {NULL}
 };
 

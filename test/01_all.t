@@ -52,6 +52,8 @@ my %Map     = (
     nodot_presuf            => { expect => 'prefix.nodot_presuf.GET.200.suffix' },
     'nodot_presuf/foo'      => { expect => 'prefix.nodot_presuf.foo.GET.200.suffix' },
     auth                    => { expect => 'auth.GET.403', resp => 403 },
+    'header/stat'           => { expect => 'set.via.header.GET.200' },
+    'aggregate'             => { expect => 'aggregate.GET.200', aggregate => '_total.GET.200' },
 );
 
 ### Only add the tests if requested
@@ -62,6 +64,7 @@ if( $TestPhp ) {
         'php/resp.php?resp=403' => { expect => 'php.resp_php.GET.403', resp => 403 },
         'php/resp.php?resp=503' => { expect => 'php.resp_php.GET.503', resp => 503},
         'php/syntax_error.php'  => { expect => 'php.syntax_error_php.GET.500', resp => 500 },
+        'php/note.php'          => { expect => 'set.via.note.GET.200' }
     );
 }
 
@@ -75,7 +78,11 @@ for my $endpoint ( sort keys %Map ) {
     my $code    = $conf->{resp} || $HTTPResp;
 
     ### make the request
-    my $res     = $ua->get($url, 'X-Expect' => $conf->{expect});
+    my $res     = $ua->get(
+                    $url,
+                    'X-Expect'      => $conf->{expect},
+                    'X-Aggregate'   => $conf->{aggregate} || '-',
+                  );
 
     diag $res->as_string if $Debug;
 
@@ -107,10 +114,12 @@ for my $endpoint ( sort keys %Map ) {
         diag $_ if $Debug;
 
         ### Now, let's look at the line and test it.
-        my $path   = $line->{'PATH'};
-        my $expect = $line->{'HEADER'};
-        my $note   = $line->{'NOTE'};
-        my @parts  = split / /, $note;
+        my $path             = $line->{'PATH'};
+        my $expect           = $line->{'EXPECT'};
+        my $note             = $line->{'NOTE'};
+        my $aggregate_note   = $line->{'AGGREGATE_NOTE'};
+        my $aggregate_expect = $line->{'AGGREGATE_EXPECT'};
+        my @parts            = split / /, $note;
 
         ### if we didn't disable the module, the note field looks something like:
         ### prefix.keyname.suffix.GET.200 1234 45
@@ -128,5 +137,11 @@ for my $endpoint ( sort keys %Map ) {
 
         ### the stat sent
         is( $parts[0], $expect,             "  Stat sent as expected: $parts[0]" );
+
+        ### If aggregate was specified, we expect it to match. Otherwise, it should
+        ### be a dot.
+        is( $aggregate_note, $aggregate_expect,
+                                            "    Aggregation as expected: $aggregate_expect" );
+
     }
 }
