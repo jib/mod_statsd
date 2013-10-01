@@ -60,6 +60,7 @@
 // module configuration - this is basically a global struct
 typedef struct {
     int enabled;     // module enabled?
+    int legacy_mode; // legacy namespace mode enabled?
     int divider;     // divide the request time by this number
     int socket;      // statsd connection
     char *host;      // statsd host
@@ -299,11 +300,20 @@ static int request_hook(request_rec *r)
     // newlines. So do that here.
     char *to_send = apr_pstrcat(
                         r->pool,
-                        stat, ":1|c",               // counter
-                        "\n",
                         stat, ":", duration, "|ms", // timer
                         NULL
                     );
+
+    // in legacy mode, we add the counter. In newer versions of statsd,
+    // the counter is generated automatically for timers.
+    if( cfg->legacy_mode ) {
+        to_send = apr_pstrcat(
+                        r->pool,
+                        to_send, "\n",  // stats so far
+                        stat, ":1|c",   // counter
+                        NULL
+                    );
+    }
 
     // You may have also asked for an aggregate stat. If so, add it here.
     if( strlen( cfg->aggregate_stat ) ) {
@@ -319,13 +329,22 @@ static int request_hook(request_rec *r)
                      );
 
         to_send = apr_pstrcat(
-                    r->pool,
-                    to_send,
-                    aggregate_stat, ":1|c",                 //counter,
-                    "\n",
-                    aggregate_stat, ":", duration, "|ms",   // timer
-                    NULL
-                );
+                        r->pool,
+                        to_send, "\n",                          // stats so far
+                        aggregate_stat, ":", duration, "|ms",   // timer
+                        NULL
+                    );
+
+        // in legacy mode, we add the counter. In newer versions of statsd,
+        // the counter is generated automatically for timers.
+        if( cfg->legacy_mode ) {
+            to_send = apr_pstrcat(
+                        r->pool,
+                        to_send, "\n",          // stats so far
+                        aggregate_stat, ":1|c", //counter,
+                        NULL
+                      );
+        }
 
         // Mostly for testing/debugging purposes, we'll also set this note,
         // but modulo the send / duration metrics
@@ -347,11 +366,9 @@ static int request_hook(request_rec *r)
         _DEBUG && fflush( stderr );
     }
 
-    char *note = apr_psprintf(r->pool, "%s %s %d", stat, duration, sent);
+    char *note = apr_psprintf(r->pool, "%s %s %d %d", stat, duration, sent, cfg->legacy_mode);
     _DEBUG && fprintf( stderr, "setting note %s: %s\n", NOTE_NAME, note );
      apr_table_setn(r->notes, NOTE_NAME, note);
-
-
 
     // We need to flush the stream for messages to appear right away.
     // Performing an fflush() in a production system is not good for
@@ -374,6 +391,8 @@ static void *init_settings(apr_pool_t *p, char *d)
 
     cfg = (settings_rec *) apr_pcalloc(p, sizeof(settings_rec));
     cfg->enabled        = 0;
+    cfg->legacy_mode    = 1;    // default to on, like statsd does:
+                                // https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
     cfg->divider        = 1000; // default to milliseconds for timing
     cfg->host           = "localhost";
     cfg->port           = "8125";
@@ -502,7 +521,10 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
     sprintf( name, "%s", cmd->cmd->name );
 
     if( strcasecmp(name, "Statsd") == 0 ) {
-        cfg->enabled     = value;
+        cfg->enabled = value;
+
+    } else if( strcasecmp(name, "StatsdLegacyMode") == 0 ) {
+        cfg->legacy_mode = value;
 
     } else {
         return apr_psprintf(cmd->pool, "No such variable %s", name);
@@ -520,6 +542,8 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
 static const command_rec commands[] = {
     AP_INIT_FLAG(   "Statsd",             set_config_enable,  NULL, OR_FILEINFO,
                     "Whether or not to enable Statsd module"),
+    AP_INIT_FLAG(   "StatsdLegacyMode",   set_config_enable,  NULL, OR_FILEINFO,
+                    "Whether or not to enable Statsd legacy namespace mode"),
     AP_INIT_TAKE1(  "StatsdHost",         set_config_value,   NULL, OR_FILEINFO,
                     "The address of your Statsd server"),
     AP_INIT_TAKE1(  "StatsdPort",         set_config_value,   NULL, OR_FILEINFO,

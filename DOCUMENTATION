@@ -65,13 +65,14 @@ able to discern what the module is doing, it sets a Note[4] that you can
 inspect in your logfiles. The Note field is %{statsd}n, is whitespace
 separated and will look something like this:
 
-  path.from.url.GET.200 942 48
+  path.from.url.GET.200 942 48 1
 
 The first field is the stat as it is sent to Statsd. The second field is
 the request duration (in whatever unit you specified, see below) and the
 third field is the amount of bytes sent to statsd. If the third field is
 -1, the delivery to Statsd failed and is a telltale sign of a broken
-Statsd configuration for this module.
+Statsd configuration for this module. The fourth field indicates whether
+legacy mode is enabled or not.
 
 Note that if your Statsd server is not on localhost, there's no way for
 the kernel to know that the remote host was not available/misconfigured
@@ -90,7 +91,7 @@ sections of the configuration.
     Syntax:     Statsd on|off
     Default:    Statsd off
 
-    When mod_statsd is loaded, and Statsd on is set, Apache send two stats (a
+    When mod_statsd is loaded, and Statsd on is set, Apache sends two stats (a
     counter and a timer) for every request that is received. For a request to
     'www.example.com/foo/bar?baz=42' the stat format would be:
 
@@ -229,6 +230,24 @@ sections of the configuration.
     where certain parts of the URL are either dynamic (like IDs) or not
     relevant to the statistic gathered.
 
+*** StatsdLegacyMode directive
+    Syntax:     StatsdLegacyMode on|off
+    Default:    StatsdLegacyMode on
 
+    By default, when mod_statsd is loaded, and Statsd on is set, Apache
+    sends two stats (a counter and a timer) for every request that is
+    received.
 
+    In newer versions of Statsd[5] (v0.6.0 and up), a new naming scheme was
+    adopted for stats sent, which, among others, produces counters for every
+    timer that's sent.
 
+    The default in Statsd v0.6.0 is to have 'Legacy Namespace' on by default,
+    which keeps on sending both the counters & timer, and mod_statsd follows
+    that default.
+
+    If you're using Statsd v0.6.0 or up, and you're NOT using the legacy
+    namespace feature, you probably want to set this directive to 'off' as
+    well.
+
+    [5] https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
