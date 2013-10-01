@@ -1,3 +1,11 @@
+libapache2-mod-statsd (1.0.2-1) unstable; urgency=low
+
+  * Support for setting the stat from an Apache note or header
+  * Support for generating top level metrics using StatsdAggregateStat
+  * Support for Statsd Legacy Namespace using StatsdLegacyMode
+
+ -- Jos Boumans <jos@dwim.org>  Tue, 01 Oct 2013 00:59:55 +0000
+
 libapache2-mod-statsd (1.0.1-1) unstable; urgency=low
 
   * Support for stripping unwanted characters from the path
