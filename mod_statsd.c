@@ -279,6 +279,16 @@ static int request_hook(request_rec *r)
 
     _DEBUG && fprintf( stderr, "duration %s\n", duration );
 
+    // This may be running in a sub-request. In that case, make sure that
+    // we get the _last_ of those requests, as that's the return code
+    // being sent to the client. This matches the default '%>s' in apache
+    // logs as well. See 'r->next' here: 
+    // https://svn.apache.org/repos/asf/httpd/httpd/branches/2.2.x/modules/loggers/mod_log_config.c
+    while (r->next) {
+        _DEBUG && fprintf( stderr, "Getting next request object...\n" );
+        r = r->next;
+    }
+
     // The entire stat, to be sent. Once as a timer, once as a counter.
     // Looks something like: prefix.keyname.suffix.GET.200
     char *stat = apr_pstrcat(
