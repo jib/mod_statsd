@@ -1,3 +1,9 @@
+libapache2-mod-statsd (1.0.4-1) unstable; urgency=low
+
+  * Use the status of the last subrequest for the Apache note
+
+ -- Jos Boumans <jos@dwim.org>  Wed, 27 Nov 2013 07:28:09 +0100
+
 libapache2-mod-statsd (1.0.3-1) unstable; urgency=low
 
   * Use the status of the last subrequest for the HTTP code
