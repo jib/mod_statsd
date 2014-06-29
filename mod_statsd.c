@@ -54,8 +54,10 @@
 #define ROOT_NAME "ROOT."               // The name for the stat when / is hit.
                                         // Note: requires trailing .
 
-#define REPLACE_CHAR '_'   // Char to use when replacing invalid characters
-
+#define REPLACE_CHAR '_'            // Char to use when replacing invalid characters
+#define GENERIC_VERB  "OtherVerbs"  // The key to use in stats to group all the verbs
+                                    // by that you don't care about (when StatsdHTTPVerbs
+                                    // is provided
 
 // module configuration - this is basically a global struct
 typedef struct {
@@ -72,6 +74,8 @@ typedef struct {
                     // Aggregate stat key to use for all stats
     apr_array_header_t *exclude_regex;
                     // List of regexes to exclude path parts from stats
+    apr_array_header_t *http_verbs;
+                    // HTTP verbs that will be logged seperately
 } settings_rec;
 
 module AP_MODULE_DECLARE_DATA statsd_module;
@@ -169,7 +173,7 @@ static int request_hook(request_rec *r)
     // we get the _last_ of those requests because:
     //  * that's the return code being sent to the client. This matches the
     // default '%>s' in apache logs.
-    // See 'r->next' here: 
+    // See 'r->next' here:
     // https://svn.apache.org/repos/asf/httpd/httpd/branches/2.2.x/modules/loggers/mod_log_config.c
     //  * we want to get the the statsd apache note from the last request.
     while (r->next) {
@@ -286,6 +290,40 @@ static int request_hook(request_rec *r)
         }
     }
 
+    /* If you're particular about what verbs you want to track separately,
+       here's the spot to filter them
+    */
+
+    // First, make a copy - this is the verb we're using unless you want us
+    // to change it.
+    char *verb = apr_pstrdup( r->pool, r->method );
+
+
+    if( cfg->http_verbs->nelts > 0) {
+
+        int i;
+        int found = 0;
+
+        // Following tutorial code here again:
+        // http://dev.ariel-networks.com/apr/apr-tutorial/html/apr-tutorial-19.html
+        for( i = 0; i < cfg->http_verbs->nelts; i++ ) {
+            char *wanted_verb = ((char **)cfg->http_verbs->elts)[i];
+            if( strcasecmp( verb, wanted_verb ) == 0 ) {
+                _DEBUG && fprintf( stderr, "Verb %s in whitelist - keeping", verb );
+
+                // Ok, we found a match, no need to go on.
+                found = 1;
+                break;
+            }
+        }
+
+        // If we didn't find a match, we'll use the generic name instead
+        if( !found ) {
+            verb = GENERIC_VERB;
+        }
+    }
+
+
     // Request time until now
     char *duration = apr_psprintf(
                         r->pool, "%" APR_TIME_T_FMT,
@@ -300,7 +338,7 @@ static int request_hook(request_rec *r)
                     r->pool,
                     cfg->prefix,
                     key,         // no dot between key & method because key
-                    r->method,   // will always end in a dot.
+                    verb,        // will always end in a dot.
                     ".",
                     apr_psprintf(r->pool, "%d", r->status),
                     cfg->suffix,
@@ -416,6 +454,7 @@ static void *init_settings(apr_pool_t *p, char *d)
     cfg->suffix         = "";
     cfg->aggregate_stat = "";
     cfg->exclude_regex  = apr_array_make(p, 2, sizeof(ap_regex_t*) );
+    cfg->http_verbs     = apr_array_make(p, 2, sizeof(const char*) );
 
     return cfg;
 }
@@ -517,6 +556,20 @@ static const char *set_config_value(cmd_parms *cmd, void *mconfig,
 
         *(ap_regex_t**)apr_array_push(cfg->exclude_regex) = regex;
 
+    // A specific list of HTTP verbs we'll log seperately
+    } else if( strcasecmp(name, "StatsdHTTPVerbs") == 0 ) {
+
+        // following tutorial here:
+        // http://dev.ariel-networks.com/apr/apr-tutorial/html/apr-tutorial-19.html
+        const char *str                                 = apr_pstrdup(cmd->pool, value);
+        *(const char**)apr_array_push(cfg->http_verbs) = str;
+
+        _DEBUG && fprintf( stderr, "http verbs = %s\n", str );
+
+        char *ary = apr_array_pstrcat( cmd->pool, cfg->http_verbs, '-' );
+        _DEBUG && fprintf( stderr, "http verbs as str = %s\n", ary );
+
+
     } else {
         return apr_psprintf(cmd->pool, "No such variable %s", name);
     }
@@ -573,6 +626,8 @@ static const command_rec commands[] = {
                     "The stat itself to send"),
     AP_INIT_ITERATE("StatsdExclude",      set_config_value,   NULL, OR_FILEINFO,
                     "A list of regexes of path parts to exclude from stats" ),
+    AP_INIT_ITERATE("StatsdHTTPVerbs",    set_config_value,   NULL, OR_FILEINFO,
+                    "A list of HTTP verbs that will be logged separately" ),
     AP_INIT_TAKE1(  "StatsdAggregateStat", set_config_value,   NULL, OR_FILEINFO,
                     "Aggregate stats key to use for all requests"),
     {NULL}
