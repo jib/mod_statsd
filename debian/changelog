@@ -1,3 +1,9 @@
+libapache2-mod-statsd (1.0.5-1) unstable; urgency=low
+
+  * Allow filtering of (unwanted) HTTP verbs in stats generation
+
+ -- Jos Boumans <jos@dwim.org>  Wed, 02 Jul 2014 19:18:54 +0200
+
 libapache2-mod-statsd (1.0.4-1) unstable; urgency=low
 
   * Use the status of the last subrequest for the Apache note
