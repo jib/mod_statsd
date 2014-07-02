@@ -241,7 +241,7 @@ sections of the configuration.
 
     To work around this, you can call out the verbs you want to track explicitly,
     and all other verbs will be grouped together under 'OtherVerbs'. Note that
-    the verbs are case sensitive and should be capatalized.
+    the verbs are case sensitive and should be capitalized.
 
     <Location />
       Statsd On
