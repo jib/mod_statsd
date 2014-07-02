@@ -54,6 +54,8 @@ my %Map     = (
     auth                    => { expect => 'auth.GET.403', resp => 403 },
     'header/stat'           => { expect => 'set.via.header.GET.200' },
     'aggregate'             => { expect => 'aggregate.GET.200', aggregate => '_total.GET.200' },
+    'httpverbs'             => { expect => 'httpverbs.GET.200' },
+    'httpverbs/not_listed'  => { expect => 'httpverbs.not_listed.OtherVerbs.200', verb => 'head' },
 );
 
 ### Only add the tests if requested
@@ -76,9 +78,10 @@ for my $endpoint ( sort keys %Map ) {
     my $ua      = LWP::UserAgent->new();
     my $conf    = $Map{ $endpoint };
     my $code    = $conf->{resp} || $HTTPResp;
+    my $verb    = $conf->{verb} || 'get';
 
     ### make the request
-    my $res     = $ua->get(
+    my $res     = $ua->$verb(
                     $url,
                     'X-Expect'      => $conf->{expect},
                     'X-Aggregate'   => $conf->{aggregate} || '-',
@@ -124,7 +127,7 @@ for my $endpoint ( sort keys %Map ) {
         ### if we didn't disable the module, the note field looks something like:
         ### prefix.keyname.suffix.GET.200 1234 45
         if( $note ne '-' ) {
-            like( $parts[0], qr/GET.\d{3}(?:\.|$)/,
+            like( $parts[0], qr/[A-Za-z]+.\d{3}(?:\.|$)/,
                                         "  Key is a valid looking stat" );
             like( $parts[1], qr/^\d+$/, "  Resp time is a valid looking number" );
             like( $parts[2], qr/^\d+$/, "  Chars sent is a valid looking number" );

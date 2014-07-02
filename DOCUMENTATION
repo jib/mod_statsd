@@ -213,7 +213,7 @@ sections of the configuration.
     rules, or complicated query patterns.
 
 *** StatsdExclude directive
-    Syntax:     StatsdExclude regex [,regex , ...]
+    Syntax:     StatsdExclude regex [, regex, ...]
     Default:    NULL
 
     This directive allows you to specify a list of regular expressions to
@@ -229,6 +229,27 @@ sections of the configuration.
     stat foo.baz.GET.200. This is again useful if you have a restful URL
     where certain parts of the URL are either dynamic (like IDs) or not
     relevant to the statistic gathered.
+
+*** StatsdHTTPVerbs directive
+    Syntax:     StatsdHTTPVerbs verb [, verb, ...]
+    Default:    NULL
+
+    This directive allows you to specify a list of HTTP verbs that you want
+    to log separately. By default, every HTTP verb will get it's own unique
+    stat assigned. However, badly behaved clients or generally busy services
+    may mean that your stat space gets very large.
+
+    To work around this, you can call out the verbs you want to track explicitly,
+    and all other verbs will be grouped together under 'OtherVerbs'. Note that
+    the verbs are case sensitive and should be capitalized.
+
+    <Location />
+      Statsd On
+      StatsdHTTPVerbs GET POST
+    </Location>
+
+    A GET request to /foo/bar would produce the stat foo.bar.GET.200, but
+    a HEAD request to /foo/bar would produce foo.bar.OtherVerbs.200
 
 *** StatsdLegacyMode directive
     Syntax:     StatsdLegacyMode on|off

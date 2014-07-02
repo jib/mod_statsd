@@ -1,7 +1,7 @@
 Source: libapache2-mod-statsd
 Section: unknown
 Priority: extra
-Maintainer: Krux Operations Team <charlie@schluting.com>
+Maintainer: Jos Boumans <mod_statsd@dwim.org>
 Build-Depends: cdbs, debhelper (>= 7), apache2-dev, perl
 Standards-Version: 3.8.3
 Homepage: https://github.com/jib/mod_statsd
