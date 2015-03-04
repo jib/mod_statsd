@@ -21,8 +21,8 @@ meaning it runs after your request backend request is completed
 and data is already being sent to the client.
 
 On my very mediocre VM on my laptop, the average overhead per call was **400** microseconds,
-and on an AWS [c1.medium](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html) 
-about **20** microseconds per call. Any high end server hardware should be able to perform 
+and on an AWS [c1.medium](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html)
+about **20** microseconds per call. Any high end server hardware should be able to perform
 better than that.
 
 I've written a companion module for [Varnish](http:/varnish-cache.org) as well called
@@ -43,7 +43,7 @@ $ sudo apt-get install apache2-dev perl
 From the checkout directory run:
 
 ```
-$ sudo ./build.pl
+$ sudo ./build.pl --install
 ```
 
 This will build, install & enable the module on your system
@@ -71,7 +71,7 @@ Configuration
 =============
 
 See the [DOCUMENTATION](DOCUMENTATION) file in the same directory as this README for an
-example configuration as well as all the documentation on the configuration directives 
+example configuration as well as all the documentation on the configuration directives
 supported.
 
 
