@@ -1,3 +1,9 @@
+libapache2-mod-statsd (1.0.5-2) unstable; urgency=low
+
+  * New build to discern between debian versions
+
+ -- Jos Boumans <jos@dwim.org>  Tue, 24 Mar 2015 00:17:00 +0000
+
 libapache2-mod-statsd (1.0.5-1) unstable; urgency=low
 
   * Allow filtering of (unwanted) HTTP verbs in stats generation
