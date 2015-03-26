@@ -82,6 +82,24 @@ $ perl build.pl
 $ dpkg-buildpackage -d -b
 ```
 
+Centos/RHEL packaging
+---------------------
+
+Make sure you have **mock** installed, which you can get by running:
+
+```
+$ sudo yum install mock
+```
+
+You can build the RPMs and Source RPM by calling the make command from the **contrib** folder:
+```
+$ cd contrib
+$ make rpm
+```
+
+The results will be placed in the **contrib/RPMS** folder afterwards.
+
+
 Configuration
 =============
 
