@@ -29,8 +29,8 @@ mkdir -p %{buildroot}%{_sysconfdir}/httpd/conf.d/
 mkdir -p %{buildroot}%{_libdir}/httpd/modules/
 install -Dpm 755 .libs/mod_statsd.so \
     %{buildroot}%{_libdir}/httpd/modules/mod_statsd.so
-install -Dpm 644 statsd.load \
-    %{buildroot}%{_sysconfdir}/httpd/conf.d/statsd.conf
+install -Dpm 644 mod_statsd.conf \
+    %{buildroot}%{_sysconfdir}/httpd/conf.d/mod_statsd.conf
 
 %clean
 rm -rf %{buildroot}
@@ -39,7 +39,7 @@ rm -rf %{buildroot}
 %defattr(-,root,root,-)
 %doc DOCUMENTATION LICENSE
 %{_libdir}/httpd/modules/mod_statsd.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.d/statsd.conf
+%config(noreplace) %{_sysconfdir}/httpd/conf.d/mod_statsd.conf
 
 ###############################################################################
 #                                  CHANGELOG                                  #

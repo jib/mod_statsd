@@ -15,7 +15,7 @@ clean:
 prepare: clean
 	@mkdir -v SRPMS RPMS src
 	@cp ../mod_statsd.c src/
-	@cp ../statsd.load src/
+	@cp mod_statsd.conf src/
 	@cp ../DOCUMENTATION src/
 	@cp ../LICENSE src/
 	tar -czf mod_statsd.tar.gz src
