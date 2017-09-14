@@ -71,6 +71,8 @@
 typedef struct {
     int enabled;     // module enabled?
     int legacy_mode; // legacy namespace mode enabled?
+    int telegraf_mode;
+                    // telegraf tags mode enabled?
     int divider;     // divide the request time by this number
     int socket;      // statsd connection
     char *host;      // statsd host
@@ -298,6 +300,8 @@ static int request_hook(request_rec *r)
         }
     }
 
+    _DEBUG && fprintf( stderr, "key = %s\n", key );
+
     /* If you're particular about what verbs you want to track separately,
        here's the spot to filter them
     */
@@ -338,20 +342,39 @@ static int request_hook(request_rec *r)
                         (apr_time_now() - r->request_time) / cfg->divider);
 
     _DEBUG && fprintf( stderr, "duration %s\n", duration );
+    _DEBUG && fprintf( stderr, "key = %s\n", key );
 
+    char *stat;
 
-    // The entire stat, to be sent. Once as a timer, once as a counter.
-    // Looks something like: prefix.keyname.suffix.GET.200
-    char *stat = apr_pstrcat(
-                    r->pool,
-                    cfg->prefix,
-                    key,         // no dot between key & method because key
-                    verb,        // will always end in a dot.
-                    ".",
-                    apr_psprintf(r->pool, "%d", r->status),
-                    cfg->suffix,
-                    NULL
-                 );
+    if( cfg->telegraf_mode ) {
+        char nkey[strlen(key) - 1];
+        apr_cpystrn(nkey, key, strlen(key));
+
+        stat = apr_pstrcat(
+                        r->pool,
+                        cfg->prefix,
+                        nkey,
+                        cfg->suffix,
+                        ",method=",
+                        verb,
+                        ",response_code=",
+                        apr_psprintf(r->pool, "%d", r->status),
+                        NULL
+                     );
+    } else {
+        // The entire stat, to be sent. Once as a timer, once as a counter.
+        // Looks something like: prefix.keyname.suffix.GET.200
+        stat = apr_pstrcat(
+                        r->pool,
+                        cfg->prefix,
+                        key,         // no dot between key & method because key
+                        verb,        // will always end in a dot.
+                        ".",
+                        apr_psprintf(r->pool, "%d", r->status),
+                        cfg->suffix,
+                        NULL
+                     );
+    }
 
 
      _DEBUG && fprintf( stderr, "stat: %s\n", stat );
@@ -378,16 +401,35 @@ static int request_hook(request_rec *r)
 
     // You may have also asked for an aggregate stat. If so, add it here.
     if( strlen( cfg->aggregate_stat ) ) {
-        char *aggregate_stat = apr_pstrcat(
-                        r->pool,
-                        cfg->prefix,
-                        cfg->aggregate_stat, // no dot between key & method because key
-                        r->method,           // will always end in a dot.
-                        ".",
-                        apr_psprintf(r->pool, "%d", r->status),
-                        cfg->suffix, // will always end in a dot.
-                        NULL
-                     );
+        char *aggregate_stat;
+
+        if( cfg->telegraf_mode ) {
+            char nastat[strlen(cfg->aggregate_stat) - 1];
+            apr_cpystrn(nastat, cfg->aggregate_stat, strlen(cfg->aggregate_stat));
+
+            aggregate_stat = apr_pstrcat(
+                            r->pool,
+                            cfg->prefix,
+                            nastat,
+                            cfg->suffix,
+                            ",method=",
+                            verb,
+                            ",response_code=",
+                            apr_psprintf(r->pool, "%d", r->status),
+                            NULL
+                        );
+        } else {
+            aggregate_stat = apr_pstrcat(
+                            r->pool,
+                            cfg->prefix,
+                            cfg->aggregate_stat, // no dot between key & method because key
+                            r->method,           // will always end in a dot.
+                            ".",
+                            apr_psprintf(r->pool, "%d", r->status),
+                            cfg->suffix, // will always end in a dot.
+                            NULL
+                         );
+        }
 
         to_send = apr_pstrcat(
                         r->pool,
@@ -454,6 +496,7 @@ static void *init_settings(apr_pool_t *p, char *d)
     cfg->enabled        = 0;
     cfg->legacy_mode    = 1;    // default to on, like statsd does:
                                 // https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
+    cfg->telegraf_mode  = 0;
     cfg->divider        = 1000; // default to milliseconds for timing
     cfg->host           = "localhost";
     cfg->port           = "8125";
@@ -602,6 +645,9 @@ static const char *set_config_enable(cmd_parms *cmd, void *mconfig,
     } else if( strcasecmp(name, "StatsdLegacyMode") == 0 ) {
         cfg->legacy_mode = value;
 
+    } else if( strcasecmp(name, "StatsdTelegrafMode") == 0 ) {
+        cfg->telegraf_mode = value;
+
     } else {
         return apr_psprintf(cmd->pool, "No such variable %s", name);
     }
@@ -632,6 +678,8 @@ static const command_rec commands[] = {
                     "A string to suffix to all the stats sent" ),
     AP_INIT_TAKE1(  "StatsdStat",         set_config_value,   NULL, OR_FILEINFO,
                     "The stat itself to send"),
+    AP_INIT_TAKE1(  "StatsdTelegrafMode", set_config_enable,  NULL, OR_FILEINFO,
+                    "Send HTTP verbs and response status as InfluxDB tags"),
     AP_INIT_ITERATE("StatsdExclude",      set_config_value,   NULL, OR_FILEINFO,
                     "A list of regexes of path parts to exclude from stats" ),
     AP_INIT_ITERATE("StatsdHTTPVerbs",    set_config_value,   NULL, OR_FILEINFO,
