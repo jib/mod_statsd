@@ -24,6 +24,11 @@ are ways to set the statname via an Apache note, an outgoing header
 or staticaly in the configuration. See the StatsdStat directive below
 for details.
 
+Telegraf-style[2] statsd metrics are also supported, in which case
+the stat format would be:
+
+  <prefix.>foo.bar<.suffix>,method=GET,response_code=200
+
 The module is implemented as a logging hook into Apache's runtime,
 meaning it runs after your request backend request is completed
 and data is already being sent to the client.
@@ -32,12 +37,13 @@ On my very mediocre VM on my laptop, the average overhead per call
 was 0.4 milliseconds, so any server grade hardware you have should
 be able to do better than that.
 
-I've written a companion module for Varnish[2] as well called
-libvmod-statsd[3] in case you're running Varnish instead/also.
+I've written a companion module for Varnish[3] as well called
+libvmod-statsd[4] in case you're running Varnish instead/also.
 
 [1] http:/github.com/etsy/statsd
-[2] http:/varnish-cache.org
-[3] https://github.com/jib/libvmod-statsd
+[2] https://github.com/influxdata/telegraf/tree/master/plugins/inputs/statsd#influx-statsd
+[3] http:/varnish-cache.org
+[4] https://github.com/jib/libvmod-statsd
 
 ######################
 ### Example
@@ -61,7 +67,7 @@ are available as well - see the Configuration section below:
 
 Because this module is setup as a logging hook, it's not possible to set
 an outgoing header with the stat, as the response is already sent. To be
-able to discern what the module is doing, it sets a Note[4] that you can
+able to discern what the module is doing, it sets a Note[5] that you can
 inspect in your logfiles. The Note field is %{statsd}n, is whitespace
 separated and will look something like this:
 
@@ -78,7 +84,7 @@ Note that if your Statsd server is not on localhost, there's no way for
 the kernel to know that the remote host was not available/misconfigured
 and can't tell if the delivery failed.
 
-[4] http://httpd.apache.org/docs/current/mod/mod_log_config.html
+[5] http://httpd.apache.org/docs/current/mod/mod_log_config.html
 
 ######################
 ### Configuration
@@ -259,7 +265,7 @@ sections of the configuration.
     sends two stats (a counter and a timer) for every request that is
     received.
 
-    In newer versions of Statsd[5] (v0.6.0 and up), a new naming scheme was
+    In newer versions of Statsd[6] (v0.6.0 and up), a new naming scheme was
     adopted for stats sent, which, among others, produces counters for every
     timer that's sent.
 
@@ -271,5 +277,17 @@ sections of the configuration.
     namespace feature, you probably want to set this directive to 'off' as
     well.
 
-    [5] https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
+    [6] https://github.com/etsy/statsd/blob/v0.6.0/exampleConfig.js#L57
 
+*** StatsdTelegrafMode directive
+    Syntax:     StatsdTelegrafMode on|off
+    Default:    StatsdTelegrafMode off
+
+    This directive changes the format of the stat to support InfluxDB tags.
+    The HTTP method and response code will be sent as tags rather than as
+    part of the stat.
+
+    You will probably also want to set StatsdStat as to avoid a large number
+    of series in InfluxDB[7]
+
+    [7] https://docs.influxdata.com/influxdb/v1.3/concepts/schema_and_data_layout/#don-t-have-too-many-series
